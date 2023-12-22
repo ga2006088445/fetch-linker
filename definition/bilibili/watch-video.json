@@ -1,0 +1,71 @@
+[
+    {
+        "id": "get-daily-task-status",
+        "url": "https://api.bilibili.com/x/member/web/exp/reward",
+        "method": "GET",
+        "headers": { 
+            "cookie": "${ENV.BILIBILI_COOKIE}",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+        },
+        "body": { },
+        "export": {
+            "watch": "body.data.watch",
+            "777":"header.bili-trace-id.[0]"
+        },
+        "display": {
+            "start": "得到每日任務狀態",
+            "end": "目前每日任務狀態",
+            "conditions": { 
+                "login": "body.data.login",
+                "watch": "body.data.watch",
+                "coins": "body.data.coins",
+                "share": "body.data.share"
+            }
+          }
+    },
+    {
+        "id": "get-rank-videos",
+        "url": "https://api.bilibili.com/x/web-interface/ranking",
+        "method": "GET",
+        "headers": { 
+            "cookie": "${ENV.BILIBILI_COOKIE}",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+        },
+        "export": {
+            "bvid":"body.data.list.[?].bvid"
+        },
+        "dependencies": ["get-daily-task-status"],
+        "display": {
+            "start": "取得排行榜影片",
+            "end": "目前取得排行榜影片",
+            "conditions": { 
+                "bvid": "body.data.list.[?].bvid"
+            }
+          }
+    },
+    {
+        "id": "watch-video",
+        "url": "https://api.bilibili.com/x/click-interface/web/heartbeat",
+        "method": "POST",
+        "headers": { 
+            "referer": "https://www.bilibili.com/",
+            "content-type": "application/x-www-form-urlencoded",
+            "cookie": "${ENV.BILIBILI_COOKIE}",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+        },
+        "body": { 
+            "bvid": "${get-rank-videos.bvid}",
+            "played_time": 12,
+            "csrf": "${ENV.BILI_JCT}"
+        },
+        "dependencies": ["get-rank-videos"],
+        "display": {
+            "start": "查看影集",
+            "end": "查看影集 code 回傳 0 則完成",
+            "conditions": { 
+                "code": "body.code",
+                "message": "body.message"
+            }
+          }
+    }
+]
