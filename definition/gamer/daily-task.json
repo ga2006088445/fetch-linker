@@ -1,0 +1,127 @@
+[
+    {
+        "id": "get-token",
+        "url": "https://www.gamer.com.tw/ajax/get_csrf_token.php",
+        "method": "GET",
+        "headers": { 
+            "cookie": "${ENV.GAMER_COOKIE}",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+        },
+        "export": {
+            "token": "body.content"
+        },
+        "display": {
+            "start": "取得 CSRF Token",
+            "end": "已取得 CSRF Token",
+            "conditions": { 
+                "token": "body.content"
+            }
+          }
+    },
+    {
+        "id": "submit-daily-sign",
+        "url": "https://www.gamer.com.tw/ajax/signin.php",
+        "method": "POST",
+        "headers": { 
+            "cookie": "${ENV.GAMER_COOKIE}",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": { 
+            "token": "${get-token.token}",
+            "action": 1
+        },
+        "dependencies": ["get-token"],
+        "display": {
+            "start": "巴哈自動登入簽到",
+            "end": "已完成巴哈自動登入簽到",
+            "conditions": { 
+                "days": ".data.days",
+                "message":".error.message"
+            }
+          }
+    },
+    {
+        "id": "submit-guild-sign",
+        "url": "https://guild.gamer.com.tw/ajax/guildSign.php",
+        "method": "POST",
+        "headers": { 
+            "cookie": "${ENV.GAMER_COOKIE}",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "content-type": "application/x-www-form-urlencoded"
+        },
+        "body": { 
+            "sn": "${ENV.GAMER_GUILD_SN}",
+            "action": 1
+        },
+        "display": {
+            "start": "巴哈自動公會登入簽到",
+            "end": "已完成巴哈自動公會登入簽到",
+            "conditions": { 
+                "message":".msg"
+            }
+          }
+    },
+    {
+        "id": "get-question",
+        "url": "https://ani.gamer.com.tw/ajax/animeGetQuestion.php",
+        "method": "GET",
+        "headers": { 
+            "cookie": "${ENV.GAMER_COOKIE}",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        },
+        "export": {
+            "token": "body.token"
+        },
+        "display": {
+            "start": "取得巴哈動畫瘋題目",
+            "end": "已取得巴哈動畫瘋題目",
+            "conditions": { 
+                "token": "body.token",
+                "message": "body.msg"
+            }
+          }
+    },
+    {
+        "id": "get-answer",
+        "url": "https://gamer.vanisoul.com/getAnswer",
+        "method": "GET",
+        "headers": { 
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        },
+        "export": {
+            "answer": "body.answer"
+        },
+        "display": {
+            "start": "取得巴哈動畫瘋答案",
+            "end": "已取得巴哈動畫瘋答案",
+            "conditions": {
+                "success": "body.success",
+                "answer": "body.answer"
+            }
+          }
+    },
+    {
+        "id": "submit-answer",
+        "url": "https://ani.gamer.com.tw/ajax/animeAnsQuestion.php",
+        "method": "POST",
+        "headers": { 
+            "cookie": "${ENV.GAMER_COOKIE}",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "content-type": "application/x-www-form-urlencoded"
+        },
+        "dependencies": ["get-question", "get-answer"],
+        "body": { 
+            "token": "${get-question.token}",
+            "ans": "${get-answer.answer}"
+        },
+        "display": {
+            "start": "送出巴哈動畫瘋答案",
+            "end": "已送出巴哈動畫瘋答案",
+            "conditions": {
+                "success": "body.success",
+                "answer": "body.answer"
+            }
+          }
+    }
+]

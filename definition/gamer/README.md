@@ -1,0 +1,1 @@
+GAMER_COOKIE => 巴哈登入後的 cookie, 需要有其 `BAHAENUR` & `BAHARUNE`

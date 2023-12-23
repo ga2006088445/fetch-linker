@@ -39,6 +39,10 @@ const argv = yargs(hideBin(process.argv))
 const { path: definitionPath, task: targetTaskName, debug: isDebugMode, exclude } = argv;
 const excludes = exclude ? exclude.split(",") : [];
 
+
+const envRegex = /\$\{ENV\.([a-zA-Z0-9_-]+)\}/g;
+const flowRegex = /\$\{([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+)\}/g;
+
 // 讀取和解析 JSON 定義檔案
 async function loadDefinition(path) {
     const content = await fs.readFile(resolve(process.cwd(), path), 'utf8');
@@ -104,6 +108,20 @@ async function executeTask(task, envVariables) {
     const headers = replaceEnvVariables(replaceFlowVariables(task.headers, envVariables));
     const body = replaceEnvVariables(replaceFlowVariables(task.body, envVariables));
 
+    // 透過兩個 regex 來判斷是否還有未替換的變數, 有的話就丟出空的資料
+    const hasEnvVariables =
+        envRegex.test(JSON.stringify(headers)) ||
+        envRegex.test(JSON.stringify(body)) ||
+        flowRegex.test(JSON.stringify(headers)) ||
+        flowRegex.test(JSON.stringify(body));
+    if (hasEnvVariables) {
+        isDebugMode ? console.error(`[ERROR] ${task.id} 有未替換的環境變數`) : null;
+        isDebugMode ? console.error(`[ERROR] ${task.id} headers`, JSON.stringify(headers)) : null;
+        isDebugMode ? console.error(`[ERROR] ${task.id} body`, JSON.stringify(body)) : null;
+        console.log(`${task.id} : 依賴變數不存在，跳過執行`);
+        return { header: {}, json: {} }
+    }
+
     const newBody = {};
     if (headers["Content-Type"] === "application/x-www-form-urlencoded") {
         newBody["body"] = JSON.stringify(body);
@@ -126,36 +144,44 @@ async function executeTask(task, envVariables) {
     const response = await fetch(task.url, requestInit);
 
     const header = response.headers.raw();
-    const json = await response.json();
+    const resBody = await response.text();
 
-    isDebugMode ? console.log(`[DEBUG] ${task.id} 查看回應`, JSON.stringify({
-        header,
-        body: json
-    })) : null;
+    // 如果回應可以解析為 JSON，則解析為 JSON, 不能則回傳 content : resBody
+    try {
+        const json = JSON.parse(resBody);
+        isDebugMode ? console.log(`[DEBUG] ${task.id} 查看回應`, JSON.stringify({
+            header,
+            body: json
+        })) : null;
 
-    return { header, json };
+        return { header, json };
+    } catch (error) {
+        const json = { content: resBody };
+        isDebugMode ? console.log(`[DEBUG] ${task.id} 查看回應`, JSON.stringify({
+            header,
+            body: json
+        })) : null;
+
+        return { header, json: json };
+    }
 }
 
 // 替換系統環境變數, ${ENV.BILIBILI_COOKIE}
 function replaceEnvVariables(obj) {
-    const regex = /\$\{ENV\.([a-zA-Z0-9_-]+)\}/g;
-
     if (!obj) return obj;
     return Object.fromEntries(
         Object.entries(obj).map(([key, value]) =>
-            [key, typeof value === 'string' ? value.replace(regex, (_, name) => process.env[name] ?? value) : value]
+            [key, typeof value === 'string' ? value.replace(envRegex, (_, name) => process.env[name] !== "" ? process.env[name] : value) : value]
         )
     );
 }
 
 // 替換此次 Flow 的共用變數, ${get-daily-task-status.cookieAA}
 function replaceFlowVariables(obj, flowVariables) {
-    const regex = /\$\{([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+)\}/g;
-
     if (!obj) return obj;
     return Object.fromEntries(
         Object.entries(obj).map(([key, value]) =>
-            [key, typeof value === 'string' ? value.replace(regex, (_, task, variable) => flowVariables[`${task}.${variable}`] ?? value) : value]
+            [key, typeof value === 'string' ? value.replace(flowRegex, (_, task, variable) => flowVariables[`${task}.${variable}`] ?? value) : value]
         )
     );
 }
@@ -195,7 +221,7 @@ async function main() {
         const conditions = thisTask.display?.conditions || {};
         const logConditionsTask = Object.entries(conditions).map(async ([key, valuePath]) => {
             const currentValue = await parsePath(valuePath, { header, body: json })
-            console.log(`${thisTask.id} ${key} = ${currentValue}`);
+            console.log(`${thisTask.id} : ${key} = ${currentValue}`);
         });
         await Promise.all(logConditionsTask);
         console.log(`${thisTask.id} : ${thisTask.display?.end}` || `結束執行 ${thisTask.id}`);
@@ -203,7 +229,7 @@ async function main() {
         // 儲存導出的參數
         const exportTasks = Object.entries(thisTask.export || {}).map(async ([key, valuePath]) => {
             const currentValue = await parsePath(valuePath, { header, body: json })
-            if (typeof currentValue !== "string") {
+            if (typeof currentValue !== "string" && currentValue !== null) {
                 throw new Error(`導出的參數必須是 string，但是 ${key} 是 ${typeof currentValue}`);
             }
             flowVariables[`${thisTask.id}.${key}`] = currentValue;
