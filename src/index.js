@@ -8,6 +8,7 @@ dotenv.config();
 
 // 解析命令列參數
 const argv = yargs(hideBin(process.argv))
+    .env('DEBUG_')
     .option('p', {
         alias: 'path',
         describe: '定義檔案的路徑',
@@ -18,7 +19,6 @@ const argv = yargs(hideBin(process.argv))
         alias: 'task',
         describe: '目標工作名稱',
         type: 'string',
-        demandOption: true,
     })
     .option('d', {
         alias: 'debug',
@@ -37,23 +37,58 @@ async function loadDefinition(path) {
     return JSON.parse(content);
 }
 
-// 計算目標工作及其依賴
-function getDependencies(taskName, tasks) {
-    let order = [];
-    let toProcess = [taskName];
+// 計算其執行工作分群排序
+function getDependencies(targetTaskName, definition) {
+    if (!targetTaskName) {
+        // 當沒有指定目標工作時，執行所有工作，且使用分群排序
+        return groupTasksByDependencies(definition);
+    } else {
+        const order = [];
+        const toProcess = [targetTaskName];
 
-    while (toProcess.length > 0) {
-        const current = toProcess.pop();
-        const task = tasks.find(t => t.id === current);
-        order.push(task);
+        while (toProcess.length > 0) {
+            const current = toProcess.pop();
+            const task = definition.find(t => t.id === current);
+            order.push(task);
 
-        if (task.dependencies) {
-            toProcess = toProcess.concat(task.dependencies);
+            if (task.dependencies) {
+                toProcess.push(...task.dependencies);
+            }
         }
+        const result = groupTasksByDependencies(order);
+        // 並使用分群排序
+        return result;
     }
-    const result = order.reverse().filter((value, index, self) => self.indexOf(value) === index);
-    return result;
 }
+
+// 分群排序
+export function groupTasksByDependencies(tasks) {
+    const taskDependencies = new Map(tasks.map(task => [task.id, new Set(task.dependencies || [])]));
+    const groups = [];
+
+    while (taskDependencies.size > 0) {
+        // 查找依賴清單為空的工作
+        const group = Array.from(taskDependencies.entries())
+            .filter(([taskId, deps]) => deps.size === 0)
+            .map(([taskId, _]) => tasks.find(task => task.id === taskId));
+
+        if (group.length === 0) {
+            throw new Error("無法解析的依賴關係，可能存在循環依賴。");
+        }
+
+        groups.push(group);
+
+        // 更新依賴清單
+        group.forEach(task => taskDependencies.delete(task.id));
+        taskDependencies.forEach((deps, taskId) => {
+            group.forEach(task => deps.delete(task.id));
+        });
+    }
+
+    return groups;
+}
+
+
 
 // 執行工作
 async function executeTask(task, envVariables) {
@@ -145,31 +180,37 @@ async function main() {
     const definition = await loadDefinition(definitionPath);
 
     // 取得目標工作及其依賴
-    const tasksToExecute = getDependencies(targetTaskName, definition);
+    const taskLayers = getDependencies(targetTaskName, definition);
 
-    let flowVariables = {};
-    for (const task of tasksToExecute) {
-        console.log(task.display?.start || `開始執行 ${task.id}`);
-        const { header, json } = await executeTask(task, flowVariables);
+    const flowVariables = {};
+    const executeAndParse = async (thisTask) => {
+        console.log(thisTask.display?.start || `開始執行 ${thisTask.id}`);
+        const { header, json } = await executeTask(thisTask, flowVariables);
 
         // 把顯示條件呈現出來
-        const conditions = task.display?.conditions || {};
+        const conditions = thisTask.display?.conditions || {};
         Object.entries(conditions).map(([key, valuePath]) => {
             const currentValue = parsePath(valuePath, { header, body: json })
-            console.log(`${task.id} ${key} = ${currentValue}`);
+            console.log(`${thisTask.id} ${key} = ${currentValue}`);
         });
-        console.log(task.display?.end || `結束執行 ${task.id}`);
+        console.log(thisTask.display?.end || `結束執行 ${thisTask.id}`);
 
         // 儲存導出的參數
-        Object.entries(task.export || {}).forEach(([key, valuePath]) => {
+        Object.entries(thisTask.export || {}).forEach(([key, valuePath]) => {
             const currentValue = parsePath(valuePath, { header, body: json })
-            flowVariables[`${task.id}.${key}`] = currentValue;
+            flowVariables[`${thisTask.id}.${key}`] = currentValue;
         });
 
-        const isLastTask = targetTaskName === task.id;
+        const isLastTask = targetTaskName === thisTask.id;
         if (isLastTask) {
-            isDebugMode ? console.log(`[DEBUG] ${task.id} 查看目標工作的可導出參數`, JSON.stringify({ header, body: json })) : null;
+            isDebugMode ? console.log(`[DEBUG] ${thisTask.id} 查看目標工作的可導出參數`, JSON.stringify({ header, body: json })) : null;
         }
+    }
+
+    for (const layer of taskLayers) {
+        await Promise.all(layer.map(async task => {
+            await executeAndParse(task)
+        }));
     }
 
     isDebugMode ? console.log("[DEBUG] 查看整體 flowVariables", JSON.stringify(flowVariables)) : null;
