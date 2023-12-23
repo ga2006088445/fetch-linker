@@ -32,4 +32,4 @@ parse 結果需要為字串 非字串即錯誤
 
 
 ### 使用方法
-node ./src/index.js "./definition/bilibili/watch-video.json" "watch-video"
+node ./src/index.js -p "./definition/bilibili/watch-video.json" -t "watch-video" -d
