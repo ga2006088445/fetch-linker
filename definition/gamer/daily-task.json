@@ -119,8 +119,7 @@
             "start": "送出巴哈動畫瘋答案",
             "end": "已送出巴哈動畫瘋答案",
             "conditions": {
-                "success": "body.success",
-                "answer": "body.answer"
+                "response": "body.response"
             }
           }
     }
