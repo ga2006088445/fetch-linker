@@ -119,7 +119,8 @@
             "start": "送出巴哈動畫瘋答案",
             "end": "已送出巴哈動畫瘋答案",
             "conditions": {
-                "response": "body.response"
+                "ok": "body.ok",
+                "message": "body.gift"
             }
           }
     }
