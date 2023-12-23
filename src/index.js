@@ -28,10 +28,16 @@ const argv = yargs(hideBin(process.argv))
         type: 'boolean',
         default: false,
     })
+    .option('e', {
+        alias: 'exclude',
+        describe: '排除目標工作 -e task1,task2',
+        type: 'string',
+    })
     .argv;
 
 // 從 yargs 解析的參數
-const { path: definitionPath, task: targetTaskName, debug: isDebugMode } = argv;
+const { path: definitionPath, task: targetTaskName, debug: isDebugMode, exclude } = argv;
+const excludes = exclude ? exclude.split(",") : [];
 
 // 讀取和解析 JSON 定義檔案
 async function loadDefinition(path) {
@@ -174,8 +180,11 @@ async function main() {
     // 讀取定義檔案
     const definition = await loadDefinition(definitionPath);
 
+    // 先排除不執行的工作
+    const reservedTasks = definition.filter(task => !task.id || !excludes.includes(task.id));
+
     // 取得目標工作及其依賴
-    const taskLayers = getDependencies(targetTaskName, definition);
+    const taskLayers = getDependencies(targetTaskName, reservedTasks);
 
     const flowVariables = {};
     const executeAndParse = async (thisTask) => {
