@@ -3,6 +3,8 @@ import fetch from 'node-fetch';
 import { resolve } from "path";
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
+import dotenv from 'dotenv';
+dotenv.config();
 
 // 解析命令列參數
 const argv = yargs(hideBin(process.argv))
