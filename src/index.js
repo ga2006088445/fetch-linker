@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import fetch from 'node-fetch';
+import { SocksProxyAgent } from "socks-proxy-agent";
 import { resolve } from "path";
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
@@ -141,7 +142,8 @@ async function executeTask(task, envVariables) {
     })) : null;
 
     // 發送請求
-    const response = await fetch(task.url, requestInit);
+    const agent = new SocksProxyAgent(process.env.SOCKS5_PROXY);
+    const response = await fetch(task.url, { agent, ...requestInit });
 
     const header = response.headers.raw();
     const resBody = await response.text();

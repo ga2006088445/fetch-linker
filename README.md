@@ -30,6 +30,8 @@ npm install
 - 目前限制
 parse 結果需要為字串 非字串即錯誤
 
+### 額外能力
+可以設定 SOCKS5_PROXY 使連線都透過其發送
 
 ### 使用方法
 node ./src/index.js -p "./definition/bilibili/watch-video.json" -t "watch-video" -d
