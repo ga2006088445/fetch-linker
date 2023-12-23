@@ -7,12 +7,12 @@ npm install
 ### 定義檔案格式
 參考 `./definition/bilibili/watch-video.json`
 定義檔案是一個 JSON 格式的文件，其中包含一系列任務定義。每個任務可以包含以下字段：
-- `id`: 任務的唯一標識符。
+- `id`: 任務的唯一標識符。禁止有 `.` 字串
 - `url`: 任務請求的目標 URL。
 - `method`: HTTP 方法（如 GET、POST）。
 - `headers`: 請求頭部。可以包含替換字段。
 - `body`: 請求的 body 內容。對於 POST 請求。可以包含替換字段。
-- `export`: 從此任務響應中導出的數據。Record<KEY, 對應位置>。
+- `export`: 從此任務響應中導出的數據。
 - `dependencies`: 此任務依賴的其他任務 ID 列表。
 - `display`: 任務過程呈現的資料與訊息。
 
@@ -24,8 +24,12 @@ npm install
 例如，如果您想引用 ID 為 loginTask 的任務中導出的 token，您可以使用 ${task.loginTask.token}。
 
 #### export 擷取資料規則 
-使用 `"body.keyA"` 等索引尋找
-可使用 陣列 `"body.keyA.[0]"`, `"body.keyA.[1]"`
+- 套用 jq cli 規則
+例如 `body.keyA.cA`
+等同於針對 body 處理 `jq ".keyA.cA"`
+- 目前限制
+parse 結果需要為字串 非字串即錯誤
+
 
 ### 使用方法
 node ./src/index.js "./definition/bilibili/watch-video.json" "watch-video"

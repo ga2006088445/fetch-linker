@@ -1,16 +1,11 @@
 [
     {
-        "id": "get-daily-task-status",
+        "id": "get-daily-task-status-start",
         "url": "https://api.bilibili.com/x/member/web/exp/reward",
         "method": "GET",
         "headers": { 
             "cookie": "${ENV.BILIBILI_COOKIE}",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
-        },
-        "body": { },
-        "export": {
-            "watch": "body.data.watch",
-            "777":"header.bili-trace-id.[0]"
         },
         "display": {
             "start": "得到每日任務狀態",
@@ -32,14 +27,14 @@
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
         },
         "export": {
-            "bvid":"body.data.list.[?].bvid"
+            "bvid":"body.data.list.[3].bvid"
         },
-        "dependencies": ["get-daily-task-status"],
+        "dependencies": ["get-daily-task-status-start"],
         "display": {
             "start": "取得排行榜影片",
-            "end": "目前取得排行榜影片",
+            "end": "已取得排行榜影片",
             "conditions": { 
-                "bvid": "body.data.list.[?].bvid"
+                "bvid": "body.data.list.[3].bvid"
             }
           }
     },
@@ -60,8 +55,32 @@
         },
         "dependencies": ["get-rank-videos"],
         "display": {
-            "start": "查看影集",
-            "end": "查看影集 code 回傳 0 則完成",
+            "start": "查看影片",
+            "end": "查看影片 code 回傳 0 則完成",
+            "conditions": { 
+                "code": "body.code",
+                "message": "body.message"
+            }
+          }
+    },
+    {
+        "id": "share-video",
+        "url": "https://api.bilibili.com/x/web-interface/share/add",
+        "method": "POST",
+        "headers": { 
+            "referer": "https://www.bilibili.com/",
+            "content-type": "application/x-www-form-urlencoded",
+            "cookie": "${ENV.BILIBILI_COOKIE}",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
+        },
+        "body": { 
+            "bvid": "${get-rank-videos.bvid}",
+            "csrf": "${ENV.BILI_JCT}"
+        },
+        "dependencies": ["get-rank-videos"],
+        "display": {
+            "start": "分享影片",
+            "end": "分享影片 code 回傳 0 則完成",
             "conditions": { 
                 "code": "body.code",
                 "message": "body.message"

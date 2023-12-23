@@ -6,6 +6,8 @@ import { hideBin } from 'yargs/helpers';
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { runJQ } from "./jq.js";
+
 // 解析命令列參數
 const argv = yargs(hideBin(process.argv))
     .env('DEBUG_')
@@ -73,7 +75,7 @@ export function groupTasksByDependencies(tasks) {
             .map(([taskId, _]) => tasks.find(task => task.id === taskId));
 
         if (group.length === 0) {
-            throw new Error("無法解析的依賴關係，可能存在循環依賴。");
+            throw new Error("無法解析的依賴關係，可能不存在依賴工作或循環依賴。");
         }
 
         groups.push(group);
@@ -103,15 +105,28 @@ async function executeTask(task, envVariables) {
         newBody["body"] = new URLSearchParams(body).toString();
     }
 
-    // 發送請求
-    const response = await fetch(task.url, {
+    const requestInit = {
         method: task.method,
         headers: headers,
         ...newBody
-    });
+    }
+
+    isDebugMode ? console.log(`[DEBUG] ${task.id} 查看發送的請求`, JSON.stringify({
+        url: task.url,
+        ...requestInit
+    })) : null;
+
+    // 發送請求
+    const response = await fetch(task.url, requestInit);
 
     const header = response.headers.raw();
     const json = await response.json();
+
+    isDebugMode ? console.log(`[DEBUG] ${task.id} 查看回應`, JSON.stringify({
+        header,
+        body: json
+    })) : null;
+
     return { header, json };
 }
 
@@ -139,39 +154,19 @@ function replaceFlowVariables(obj, flowVariables) {
     );
 }
 
-function parsePath(valuePath, { header, body }) {
-    const pathParts = valuePath.split('.').filter(p => p !== ""); // 移除空字符串
-    const source = pathParts.shift(); // 'header' 或 'body'
+async function parsePath(valuePath, { header, body }) {
+    // 使用 split 方法將字串分割為數組，並使用解構賦值取得第一個元素和剩餘部分
+    const [firstPart, ...rest] = valuePath.split(".");
 
-    let currentValue = source === "header" ? header : body;
-    pathParts.forEach(part => {
-        if (part.endsWith(']')) {
-            // 處理陣列索引，例如 "c[0]"
-            const [_, indexPart] = part.split('[');
-            const indexStr = indexPart.replace(']', '')
+    // 將剩餘部分使用 join 方法重新組合成字串，並在前面加上點
+    const secondPart = "." + rest.join(".");
 
-            if (indexStr === "?") {
-                // 如果是隨機索引 "[?]"
-                const arrayLength = currentValue?.length;
-                if (arrayLength > 0) {
-                    const randomIndex = Math.floor(Math.random() * arrayLength);
-                    currentValue = currentValue?.[randomIndex];
-                } else {
-                    currentValue = undefined;
-                }
-            } else {
-                // 如果是特定索引 "[0]"，"[1]" 等
-                const index = parseInt(indexStr, 10);
-                currentValue = currentValue?.[index];
-            }
+    const isHeader = firstPart === "header";
+    const json = isHeader ? header : body;
 
-        } else {
-            // 正常處理非陣列屬性
-            currentValue = currentValue?.[part];
-        }
-    });
-
+    const currentValue = await runJQ(json, secondPart);
     return currentValue;
+
 }
 
 // 主程式
@@ -184,22 +179,27 @@ async function main() {
 
     const flowVariables = {};
     const executeAndParse = async (thisTask) => {
-        console.log(thisTask.display?.start || `開始執行 ${thisTask.id}`);
+        console.log(`${thisTask.id} : ${thisTask.display?.start}` || `開始執行 ${thisTask.id}`);
         const { header, json } = await executeTask(thisTask, flowVariables);
 
         // 把顯示條件呈現出來
         const conditions = thisTask.display?.conditions || {};
-        Object.entries(conditions).map(([key, valuePath]) => {
-            const currentValue = parsePath(valuePath, { header, body: json })
+        const logConditionsTask = Object.entries(conditions).map(async ([key, valuePath]) => {
+            const currentValue = await parsePath(valuePath, { header, body: json })
             console.log(`${thisTask.id} ${key} = ${currentValue}`);
         });
-        console.log(thisTask.display?.end || `結束執行 ${thisTask.id}`);
+        await Promise.all(logConditionsTask);
+        console.log(`${thisTask.id} : ${thisTask.display?.end}` || `結束執行 ${thisTask.id}`);
 
         // 儲存導出的參數
-        Object.entries(thisTask.export || {}).forEach(([key, valuePath]) => {
-            const currentValue = parsePath(valuePath, { header, body: json })
+        const exportTasks = Object.entries(thisTask.export || {}).map(async ([key, valuePath]) => {
+            const currentValue = await parsePath(valuePath, { header, body: json })
+            if (typeof currentValue !== "string") {
+                throw new Error(`導出的參數必須是 string，但是 ${key} 是 ${typeof currentValue}`);
+            }
             flowVariables[`${thisTask.id}.${key}`] = currentValue;
         });
+        await Promise.all(exportTasks);
 
         const isLastTask = targetTaskName === thisTask.id;
         if (isLastTask) {
