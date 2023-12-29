@@ -40,10 +40,6 @@ const argv = yargs(hideBin(process.argv))
 const { path: definitionPath, task: targetTaskName, debug: isDebugMode, exclude } = argv;
 const excludes = exclude ? exclude.split(",") : [];
 
-
-const envRegex = /\$\{ENV\.([a-zA-Z0-9_-]+)\}/g;
-const flowRegex = /\$\{([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+)\}/g;
-
 // 讀取和解析 JSON 定義檔案
 async function loadDefinition(path) {
     const content = await fs.readFile(resolve(process.cwd(), path), 'utf8');
@@ -82,7 +78,7 @@ export function groupTasksByDependencies(tasks) {
     while (taskDependencies.size > 0) {
         // 查找依賴清單為空的工作
         const group = Array.from(taskDependencies.entries())
-            .filter(([taskId, deps]) => deps.size === 0)
+            .filter(([, deps]) => deps.size === 0)
             .map(([taskId, _]) => tasks.find(task => task.id === taskId));
 
         if (group.length === 0) {
@@ -110,6 +106,8 @@ async function executeTask(task, envVariables) {
     const body = replaceEnvVariables(replaceFlowVariables(task.body, envVariables));
 
     // 透過兩個 regex 來判斷是否還有未替換的變數, 有的話就丟出空的資料
+    const envRegex = /\$\{ENV\.([a-zA-Z0-9_-]+)\}/g;
+    const flowRegex = /\$\{([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+)\}/g;
     const hasEnvVariables =
         envRegex.test(JSON.stringify(headers)) ||
         envRegex.test(JSON.stringify(body)) ||
@@ -124,9 +122,9 @@ async function executeTask(task, envVariables) {
     }
 
     const newBody = {};
-    if (headers["Content-Type"] === "application/x-www-form-urlencoded") {
+    if (task.method === "POST" && headers["content-type"] === "application/json") {
         newBody["body"] = JSON.stringify(body);
-    } else if (task.method === "POST") {
+    } else if (task.method === "POST" && headers["content-type"] === "application/x-www-form-urlencoded") {
         newBody["body"] = new URLSearchParams(body).toString();
     }
 
@@ -172,9 +170,18 @@ async function executeTask(task, envVariables) {
 function replaceEnvVariables(obj) {
     if (!obj) return obj;
     return Object.fromEntries(
-        Object.entries(obj).map(([key, value]) =>
-            [key, typeof value === 'string' ? value.replace(envRegex, (_, name) => process.env[name] !== "" ? process.env[name] : value) : value]
-        )
+        Object.entries(obj).map(([key, value]) => {
+            const envRegex = /\$\{ENV\.([a-zA-Z0-9_-]+)\}/g;
+            let match;
+            while ((match = envRegex.exec(value)) !== null) {
+                if (match && match.length === 2 && process.env[match[1]]) {
+                    const replaceString = process.env[match[1]];
+                    const newValue = value.replace(`\${ENV.${match[1]}}`, replaceString);
+                    return [key, newValue];
+                }
+            }
+            return [key, value]
+        })
     );
 }
 
@@ -182,9 +189,18 @@ function replaceEnvVariables(obj) {
 function replaceFlowVariables(obj, flowVariables) {
     if (!obj) return obj;
     return Object.fromEntries(
-        Object.entries(obj).map(([key, value]) =>
-            [key, typeof value === 'string' ? value.replace(flowRegex, (_, task, variable) => flowVariables[`${task}.${variable}`] ?? value) : value]
-        )
+        Object.entries(obj).map(([key, value]) => {
+            const flowRegex = /\$\{([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+)\}/g;
+            let match;
+            while ((match = flowRegex.exec(value)) !== null) {
+                if (match && match.length === 3 && flowVariables[`${match[1]}.${match[2]}`]) {
+                    const replaceString = flowVariables[`${match[1]}.${match[2]}`];
+                    const newValue = value.replace(`\${${match[1]}.${match[2]}}`, replaceString)
+                    return [key, newValue];
+                }
+            }
+            return [key, value]
+        })
     );
 }
 
