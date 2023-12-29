@@ -1,0 +1,22 @@
+[
+    {
+        "id": "get-question",
+        "url": "https://ani.gamer.com.tw/ajax/animeGetQuestion.php",
+        "method": "GET",
+        "headers": { 
+            "cookie": "${ENV.GAMER_COOKIE}",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        },
+        "export": {
+            "token": "body.token"
+        },
+        "display": {
+            "start": "取得巴哈動畫瘋題目",
+            "end": "已取得巴哈動畫瘋題目",
+            "conditions": { 
+                "token": "body.token",
+                "message": "body.msg"
+            }
+          }
+    }
+]
