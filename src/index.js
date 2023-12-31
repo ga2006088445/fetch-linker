@@ -5,7 +5,6 @@ import { resolve } from "path";
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import dotenv from 'dotenv';
-import got from 'cloudflare-scraper';
 dotenv.config();
 
 import { runJQ } from "./jq.js";
@@ -142,11 +141,7 @@ async function executeTask(task, envVariables) {
 
     // 發送請求
     const agent = new SocksProxyAgent(process.env.SOCKS5_PROXY);
-
-    const response = task.method === "GET" ?
-        got.get(task.url, { agent, ...requestInit }) :
-        got.post(task.url, { agent, ...requestInit });
-    // await fetch(task.url, { agent, ...requestInit });
+    const response = await fetch(task.url, { agent, ...requestInit });
 
     const header = response.headers.raw();
     const resBody = await response.text();
